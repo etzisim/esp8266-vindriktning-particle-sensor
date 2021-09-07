@@ -2,6 +2,7 @@
 
 #include <ArduinoJson.h>
 #include <FS.h>
+#include <LittleFS.h> 
 
 namespace Config {
     char mqtt_server[80] = "example.tld";
@@ -10,25 +11,30 @@ namespace Config {
     char password[24] = "";
 
     void save() {
+        printf("Format FS an save new Values!\n");
+        LittleFS.format();
+        printf("Format FS done!\n");
         DynamicJsonDocument json(512);
         json["mqtt_server"] = mqtt_server;
         json["username"] = username;
         json["password"] = password;
 
-        File configFile = SPIFFS.open("/config.json", "w");
+        File configFile = LittleFS.open("/config.json", "w");
         if (!configFile) {
+            printf("couldnt open config.json!\n");
             return;
         }
 
         serializeJson(json, configFile);
         configFile.close();
+        printf("config.json written!\n ");
     }
 
     void load() {
-        if (SPIFFS.begin()) {
+        if (LittleFS.begin()) {
 
-            if (SPIFFS.exists("/config.json")) {
-                File configFile = SPIFFS.open("/config.json", "r");
+            if (LittleFS.exists("/config.json")) {
+                File configFile = LittleFS.open("/config.json", "r");
 
                 if (configFile) {
                     const size_t size = configFile.size();

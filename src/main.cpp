@@ -1,3 +1,4 @@
+#include <Arduino.h>
 #include <ArduinoJson.h>
 #include <ArduinoOTA.h>
 #include <DNSServer.h>
@@ -9,6 +10,8 @@
 #include "Config.h"
 #include "SerialCom.h"
 #include "Types.h"
+
+#include "Prototypes.h"
 
 particleSensorState_t state;
 
@@ -41,11 +44,13 @@ char MQTT_TOPIC_AUTOCONF_PM25_SENSOR[128];
 
 bool shouldSaveConfig = false;
 
-void saveConfigCallback() {
+void saveConfigCallback()
+{
     shouldSaveConfig = true;
 }
 
-void setup() {
+void setup()
+{
     Serial.begin(115200);
     SerialCom::setup();
 
@@ -57,7 +62,7 @@ void setup() {
     Serial.printf("CPU Frequency: %u MHz\n", ESP.getCpuFreqMHz());
     Serial.printf("Reset reason: %s\n", ESP.getResetReason().c_str());
 
-    delay(3000);
+    delay(300);
 
     snprintf(identifier, sizeof(identifier), "VINDRIKTNING-%X", ESP.getChipId());
     snprintf(MQTT_TOPIC_AVAILABILITY, 127, "%s/%s/status", FIRMWARE_PREFIX, identifier);
@@ -87,26 +92,38 @@ void setup() {
     mqttReconnect();
 }
 
-void setupOTA() {
-    ArduinoOTA.onStart([]() { Serial.println("Start"); });
-    ArduinoOTA.onEnd([]() { Serial.println("\nEnd"); });
-    ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
-        Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
-    });
-    ArduinoOTA.onError([](ota_error_t error) {
-        Serial.printf("Error[%u]: ", error);
-        if (error == OTA_AUTH_ERROR) {
-            Serial.println("Auth Failed");
-        } else if (error == OTA_BEGIN_ERROR) {
-            Serial.println("Begin Failed");
-        } else if (error == OTA_CONNECT_ERROR) {
-            Serial.println("Connect Failed");
-        } else if (error == OTA_RECEIVE_ERROR) {
-            Serial.println("Receive Failed");
-        } else if (error == OTA_END_ERROR) {
-            Serial.println("End Failed");
-        }
-    });
+void setupOTA()
+{
+    ArduinoOTA.onStart([]()
+                       { Serial.println("Start"); });
+    ArduinoOTA.onEnd([]()
+                     { Serial.println("\nEnd"); });
+    ArduinoOTA.onProgress([](unsigned int progress, unsigned int total)
+                          { Serial.printf("Progress: %u%%\r\n", (progress / (total / 100))); });
+    ArduinoOTA.onError([](ota_error_t error)
+                       {
+                           Serial.printf("Error[%u]: ", error);
+                           if (error == OTA_AUTH_ERROR)
+                           {
+                               Serial.println("Auth Failed");
+                           }
+                           else if (error == OTA_BEGIN_ERROR)
+                           {
+                               Serial.println("Begin Failed");
+                           }
+                           else if (error == OTA_CONNECT_ERROR)
+                           {
+                               Serial.println("Connect Failed");
+                           }
+                           else if (error == OTA_RECEIVE_ERROR)
+                           {
+                               Serial.println("Receive Failed");
+                           }
+                           else if (error == OTA_END_ERROR)
+                           {
+                               Serial.println("End Failed");
+                           }
+                       });
 
     ArduinoOTA.setHostname(identifier);
 
@@ -115,30 +132,35 @@ void setupOTA() {
     ArduinoOTA.begin();
 }
 
-void loop() {
+void loop()
+{
     ArduinoOTA.handle();
     SerialCom::handleUart(state);
     mqttClient.loop();
 
     const uint32_t currentMillis = millis();
-    if (currentMillis - statusPublishPreviousMillis >= statusPublishInterval) {
+    if (currentMillis - statusPublishPreviousMillis >= statusPublishInterval)
+    {
         statusPublishPreviousMillis = currentMillis;
 
-        if (state.valid) {
+        if (state.valid)
+        {
             printf("Publish state\n");
             publishState();
         }
     }
 
-    if (!mqttClient.connected() && currentMillis - lastMqttConnectionAttempt >= mqttConnectionInterval) {
+    if (!mqttClient.connected() && currentMillis - lastMqttConnectionAttempt >= mqttConnectionInterval)
+    {
         lastMqttConnectionAttempt = currentMillis;
         printf("Reconnect mqtt\n");
         mqttReconnect();
     }
 }
 
-void setupWifi() {
-    wifiManager.setDebugOutput(false);
+void setupWifi()
+{
+    wifiManager.setDebugOutput(true);
     wifiManager.setSaveConfigCallback(saveConfigCallback);
 
     wifiManager.addParameter(&custom_mqtt_server);
@@ -153,9 +175,20 @@ void setupWifi() {
     strcpy(Config::username, custom_mqtt_user.getValue());
     strcpy(Config::password, custom_mqtt_pass.getValue());
 
-    if (shouldSaveConfig) {
+    if (false) // Set to true to force new MQTT Data
+    {
+        strcpy(Config::mqtt_server, "mqtt-ip");
+        strcpy(Config::username, "mqtt-user");
+        strcpy(Config::password, "mqtt-password");
+        shouldSaveConfig = true;
+    }
+
+    if (shouldSaveConfig)
+    {
         Config::save();
-    } else {
+    }
+    else
+    {
         // For some reason, the read values get overwritten in this function
         // To combat this, we just reload the config
         // This is most likely a logic error which could be fixed otherwise
@@ -163,15 +196,24 @@ void setupWifi() {
     }
 }
 
-void resetWifiSettingsAndReboot() {
+void resetWifiSettingsAndReboot()
+{
     wifiManager.resetSettings();
     delay(3000);
     ESP.restart();
 }
 
-void mqttReconnect() {
-    for (uint8_t attempt = 0; attempt < 3; ++attempt) {
-        if (mqttClient.connect(identifier, Config::username, Config::password, MQTT_TOPIC_AVAILABILITY, 1, true, AVAILABILITY_OFFLINE)) {
+void mqttReconnect()
+{
+    for (uint8_t attempt = 0; attempt < 3; ++attempt)
+    {
+        printf("Try ot connect to: %s \n", Config::mqtt_server);
+        printf("as user          : %s \n", Config::username);
+        printf("with password    : %s \n", Config::password);
+
+        if (mqttClient.connect(identifier, Config::username, Config::password, MQTT_TOPIC_AVAILABILITY, 1, true, AVAILABILITY_OFFLINE))
+        {
+            printf("connected to mqtt\n");
             mqttClient.publish(MQTT_TOPIC_AVAILABILITY, AVAILABILITY_ONLINE, true);
             publishAutoConfig();
 
@@ -183,13 +225,16 @@ void mqttReconnect() {
     }
 }
 
-bool isMqttConnected() {
+bool isMqttConnected()
+{
     return mqttClient.connected();
 }
 
-void publishState() {
+void publishState()
+{
     DynamicJsonDocument wifiJson(192);
     DynamicJsonDocument stateJson(604);
+    DynamicJsonDocument rawJson(300);
     char payload[256];
 
     wifiJson["ssid"] = WiFi.SSID();
@@ -197,16 +242,26 @@ void publishState() {
     wifiJson["rssi"] = WiFi.RSSI();
 
     stateJson["pm25"] = state.avgPM25;
+    
+    char raw[255];
+    sprintf(raw, "%p", state.raw_buffer);
+    rawJson["buffer"] = raw;
+
+    rawJson["uptime"] = millis();
 
     stateJson["wifi"] = wifiJson.as<JsonObject>();
+
+//send also raw data
+    stateJson["raw"] = rawJson.as<JsonObject>();
 
     serializeJson(stateJson, payload);
     mqttClient.publish(&MQTT_TOPIC_STATE[0], &payload[0], true);
 }
 
-void mqttCallback(char* topic, uint8_t* payload, unsigned int length) { }
+void mqttCallback(char *topic, uint8_t *payload, unsigned int length) {}
 
-void publishAutoConfig() {
+void publishAutoConfig()
+{
     char mqttPayload[2048];
     DynamicJsonDocument device(256);
     DynamicJsonDocument autoconfPayload(1024);
@@ -219,7 +274,7 @@ void publishAutoConfig() {
     device["manufacturer"] = "Ikea";
     device["model"] = "VINDRIKTNING";
     device["name"] = identifier;
-    device["sw_version"] = "2021.08.0";
+    device["sw_version"] = "2021.09.0";
 
     autoconfPayload["device"] = device.as<JsonObject>();
     autoconfPayload["availability_topic"] = MQTT_TOPIC_AVAILABILITY;

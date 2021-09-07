@@ -4,8 +4,9 @@
 
 #include "Types.h"
 
-namespace SerialCom {
-    constexpr static const uint8_t PIN_UART_RX = 4; // D2 on Wemos D1 Mini
+namespace SerialCom
+{
+    constexpr static const uint8_t PIN_UART_RX = D3;
     constexpr static const uint8_t PIN_UART_TX = 13; // UNUSED
 
     SoftwareSerial sensorSerial(PIN_UART_RX, PIN_UART_TX);
@@ -13,17 +14,27 @@ namespace SerialCom {
     uint8_t serialRxBuf[255];
     uint8_t rxBufIdx = 0;
 
-    void setup() {
+    void setup()
+    {
         sensorSerial.begin(9600);
     }
 
-    void clearRxBuf() {
+    void clearRxBuf()
+    {
         // Clear everything for the next message
         memset(serialRxBuf, 0, sizeof(serialRxBuf));
         rxBufIdx = 0;
     }
 
-    void parseState(particleSensorState_t& state) {
+    void parseState(particleSensorState_t &state)
+    {
+        //save raw buffer
+        for (uint8_t i = 0; i < 255; i++)
+        {
+            
+            state.raw_buffer[i] = serialRxBuf[i];
+        }
+
         /**
          *         MSB  DF 3     DF 4  LSB
          * uint16_t = xxxxxxxx xxxxxxxx
@@ -36,10 +47,12 @@ namespace SerialCom {
 
         state.measurementIdx = (state.measurementIdx + 1) % 5;
 
-        if (state.measurementIdx == 0) {
+        if (state.measurementIdx == 0)
+        {
             float avgPM25 = 0.0f;
 
-            for (uint8_t i = 0; i < 5; ++i) {
+            for (uint8_t i = 0; i < 5; ++i)
+            {
                 avgPM25 += state.measurements[i] / 5.0f;
             }
 
@@ -52,50 +65,61 @@ namespace SerialCom {
         clearRxBuf();
     }
 
-    bool isValidHeader() {
+    bool isValidHeader()
+    {
         bool headerValid = serialRxBuf[0] == 0x16 && serialRxBuf[1] == 0x11 && serialRxBuf[2] == 0x0B;
 
-        if (!headerValid) {
+        if (!headerValid)
+        {
             Serial.println("Received message with invalid header.");
         }
 
         return headerValid;
     }
 
-    bool isValidChecksum() {
+    bool isValidChecksum()
+    {
         uint8_t checksum = 0;
 
-        for (uint8_t i = 0; i < 20; i++) {
+        for (uint8_t i = 0; i < 20; i++)
+        {
             checksum += serialRxBuf[i];
         }
 
-        if (checksum != 0) {
+        if (checksum != 0)
+        {
             Serial.printf("Received message with invalid checksum. Expected: 0. Actual: %d\n", checksum);
         }
 
         return checksum == 0;
     }
 
-    void handleUart(particleSensorState_t& state) {
-        if (!sensorSerial.available()) {
+    void handleUart(particleSensorState_t &state)
+    {
+        if (!sensorSerial.available())
+        {
             return;
         }
 
         Serial.print("Receiving:");
-        while (sensorSerial.available()) {
+        while (sensorSerial.available())
+        {
             serialRxBuf[rxBufIdx++] = sensorSerial.read();
             Serial.print(".");
 
             // Without this delay, receiving data breaks for reasons that are beyond me
             delay(15);
 
-            if (rxBufIdx >= 64) {
+            if (rxBufIdx >= 64)
+            {
                 clearRxBuf();
             }
         }
+
         Serial.println("Done.");
 
-        if (isValidHeader() && isValidChecksum()) {
+        if (isValidHeader() && isValidChecksum())
+        {
             parseState(state);
 
             Serial.printf(
@@ -105,9 +129,10 @@ namespace SerialCom {
                 state.measurements[1],
                 state.measurements[2],
                 state.measurements[3],
-                state.measurements[4]
-            );
-        } else {
+                state.measurements[4]);
+        }
+        else
+        {
             clearRxBuf();
         }
     }
